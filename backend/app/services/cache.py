@@ -1,4 +1,5 @@
 import json
+from unittest import result
 import redis.asyncio as redis
 from typing import Dict, Any
 import os
@@ -26,4 +27,19 @@ async def get_revenue_summary(property_id: str, tenant_id: str) -> Dict[str, Any
     # Cache the result for 5 minutes
     await redis_client.setex(cache_key, 300, json.dumps(result))
     
+    return result
+
+async def get_monthly_revenue(property_id: str, month: int, year: int, tenant_id: str):
+    
+    cache_key = f"revenue:{tenant_id}:{property_id}:{year}:{month}"
+    cached = await redis_client.get(cache_key)
+    if cached:
+        return Decimal(cached)
+    
+    from app.services.reservations import calculate_monthly_revenue
+
+    result = await calculate_monthly_revenue(property_id, month, year, tenant_id)
+
+    await redis_client.setex(cache_key, 300, str(result))
+
     return result
