@@ -34,12 +34,12 @@ async def get_monthly_revenue(property_id: str, month: int, year: int, tenant_id
     cache_key = f"revenue:{tenant_id}:{property_id}:{year}:{month}"
     cached = await redis_client.get(cache_key)
     if cached:
-        return Decimal(cached)
+        return json.loads(cached)
     
     from app.services.reservations import calculate_monthly_revenue
 
     result = await calculate_monthly_revenue(property_id, month, year, tenant_id)
 
-    await redis_client.setex(cache_key, 300, str(result))
+    await redis_client.setex(cache_key, 300, json.dumps(result))
 
     return result

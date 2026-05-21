@@ -29,10 +29,10 @@ async def calculate_monthly_revenue(property_id: str, month: int, year: int, ten
                 query = text("""
                     SELECT SUM(total_amount) as total
                     FROM reservations
-                    WHERE property_id = $1
-                    AND tenant_id = $2
-                    AND check_in_date >= $3
-                    AND check_in_date < $4
+                    WHERE property_id = :property_id
+                    AND tenant_id = :tenant_id
+                    AND check_in_date >= :start_date
+                    AND check_in_date < :end_date
                     """)
                 
                 result = await session.execute(query, {
@@ -44,11 +44,11 @@ async def calculate_monthly_revenue(property_id: str, month: int, year: int, ten
                 })
                 row = result.fetchone()
                 if row:
-                    monthly_revenue = Decimal(str(row.total_revenue))
+                    monthly_revenue = Decimal(str(row.total))
                     return {
                         "property_id": property_id,
                         "tenant_id": tenant_id,
-                        "total": str(total_revenue),
+                        "total": str(monthly_revenue),
                         "currency": "USD", 
                         "count": row.reservation_count
                     }
