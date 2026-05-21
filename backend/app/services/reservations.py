@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Dict, Any, List
 
-async def calculate_monthly_revenue(property_id: str, month: int, year: int, db_session=None) -> Decimal:
+async def calculate_monthly_revenue(property_id: str, month: int, year: int, tenant_id: str, db_session=None) -> Decimal:
     """
     Calculates revenue for a specific month.
     """
@@ -13,23 +13,67 @@ async def calculate_monthly_revenue(property_id: str, month: int, year: int, db_
     else:
         end_date = datetime(year + 1, 1, 1)
         
-    print(f"DEBUG: Querying revenue for {property_id} from {start_date} to {end_date}")
-
-    # SQL Simulation (This would be executed against the actual DB)
-    query = """
-        SELECT SUM(total_amount) as total
-        FROM reservations
-        WHERE property_id = $1
-        AND tenant_id = $2
-        AND check_in_date >= $3
-        AND check_in_date < $4
-    """
+    print(f"DEBUG: Querying revenue for {property_id} from {start_date} to {end_date}")    
     
     # In production this query executes against a database session.
-    # result = await db.fetch_val(query, property_id, tenant_id, start_date, end_date)
-    # return result or Decimal('0')
+    try:
+        # Import database pool
+        from app.core.database_pool import db_pool
+        await db_pool.initialize()
+        
+        if db_pool.session_factory:
+            async with db_pool.get_session() as session:
+                # Use SQLAlchemy text for raw SQL
+                from sqlalchemy import text
+                
+                query = text("""
+                    SELECT SUM(total_amount) as total
+                    FROM reservations
+                    WHERE property_id = $1
+                    AND tenant_id = $2
+                    AND check_in_date >= $3
+                    AND check_in_date < $4
+                    """)
+                
+                result = await session.execute(query, {
+                    "property_id": property_id, 
+                    "tenant_id": tenant_id,
+                    "start_date": start_date,
+                    "end_date": end_date
+
+                })
+                row = result.fetchone()
+                if row:
+                    monthly_revenue = Decimal(str(row.total_revenue))
+                    return {
+                        "property_id": property_id,
+                        "tenant_id": tenant_id,
+                        "total": str(total_revenue),
+                        "currency": "USD", 
+                        "count": row.reservation_count
+                    }
+                else:
+                    # No reservations found for this property
+                    return {
+                        "property_id": property_id,
+                        "tenant_id": tenant_id,
+                        "total": "0.00",
+                        "currency": "USD",
+                        "count": 0
+                    }
+        else:
+            raise Exception("Database pool not available")
+    except Exception as e:    
+        print(f"Database error for {property_id} (tenant: {tenant_id}) on period from {start_date} to {end_date}: {e}")
+        #Return wrong data to show there is an error
+        return {
+                "property_id": property_id,
+                "tenant_id": tenant_id,
+                "total": "-1.00",
+                "currency": "USD",
+                "count": 0
+            }
     
-    return Decimal('0') # Placeholder for now until DB connection is finalized
 
 async def calculate_total_revenue(property_id: str, tenant_id: str) -> Dict[str, Any]:
     """
@@ -38,6 +82,7 @@ async def calculate_total_revenue(property_id: str, tenant_id: str) -> Dict[str,
     try:
         # Import database pool
         from app.core.database_pool import db_pool
+        await db_pool.initialize()
         
         if db_pool.session_factory:
             async with db_pool.get_session() as session:
